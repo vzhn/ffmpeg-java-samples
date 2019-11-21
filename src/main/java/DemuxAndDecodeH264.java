@@ -194,7 +194,7 @@ public final class DemuxAndDecodeH264 {
                 d.toMinutesPart(),
                 d.toSecondsPart(),
                 d.toMillisPart());
-//        ImageIO.write(img, "png", new File(name));
+        ImageIO.write(img, "png", new File(name));
     }
 
     private void free() {
