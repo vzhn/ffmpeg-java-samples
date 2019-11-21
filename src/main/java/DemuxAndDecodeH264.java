@@ -16,7 +16,7 @@ import static org.bytedeco.javacpp.presets.avutil.AVERROR_EAGAIN;
 /**
 * Read and decode h264 video from matroska (MKV) container
 */
-    public final class DemuxAndDecodeH264 {
+public final class DemuxAndDecodeH264 {
     /** Matroska format context */
     private AVFormatContext avfmtCtx;
 
@@ -73,6 +73,7 @@ import static org.bytedeco.javacpp.presets.avutil.AVERROR_EAGAIN;
         avpacket = new avcodec.AVPacket();
         while ((av_read_frame(avfmtCtx, avpacket)) >= 0) {
             processAVPacket(avpacket);
+            av_packet_unref(avpacket);
         }
         // now process delayed frames
         processAVPacket(null);
@@ -193,14 +194,18 @@ import static org.bytedeco.javacpp.presets.avutil.AVERROR_EAGAIN;
                 d.toMinutesPart(),
                 d.toSecondsPart(),
                 d.toMillisPart());
-        ImageIO.write(img, "png", new File(name));
+//        ImageIO.write(img, "png", new File(name));
     }
 
     private void free() {
-        swscale.sws_freeContext(sws_ctx);
         av_packet_unref(avpacket);
+        avcodec.avcodec_close(codecContext);
+        avcodec.avcodec_free_context(codecContext);
+
+        swscale.sws_freeContext(sws_ctx);
         av_frame_free(rgbFrame);
         av_frame_free(yuv420Frame);
-        avfmtCtx.close();
+        avformat.avformat_close_input(avfmtCtx);
+        avformat.avformat_free_context(avfmtCtx);
     }
 }
