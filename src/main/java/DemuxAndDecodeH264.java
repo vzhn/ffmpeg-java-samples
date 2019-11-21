@@ -1,8 +1,12 @@
 import org.bytedeco.javacpp.*;
 
+import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferByte;
+import java.io.File;
 import java.io.IOException;
+import java.time.Duration;
+import java.time.temporal.ChronoUnit;
 
 import static org.bytedeco.javacpp.avcodec.*;
 import static org.bytedeco.javacpp.avformat.*;
@@ -40,6 +44,11 @@ public final class DemuxAndDecodeH264 {
     /** yuv420 to rgb converter */
     private swscale.SwsContext sws_ctx;
 
+    /** number of frame */
+    private int nframe;
+
+    private AVRational tb1000;
+
     private DemuxAndDecodeH264() { }
 
     public static void main(String... argv) throws IOException {
@@ -56,6 +65,11 @@ public final class DemuxAndDecodeH264 {
         initYuv420Frame();
         getSwsContext();
 
+        // 1/1000 of second
+        tb1000 = new AVRational();
+        tb1000.num(1);
+        tb1000.den(1000);
+
         avpacket = new avcodec.AVPacket();
         while ((av_read_frame(avfmtCtx, avpacket)) >= 0) {
             int ret = avcodec.avcodec_send_packet(codecContext, avpacket);
@@ -63,24 +77,49 @@ public final class DemuxAndDecodeH264 {
                 System.err.println("Error sending a packet for decoding\n");
                 System.exit(1);
             }
-            while (ret >= 0) {
-                ret = avcodec.avcodec_receive_frame(codecContext, yuv420Frame);
-                if (ret == AVERROR_EAGAIN() || ret == AVERROR_EOF()) {
-                    continue;
-                } else
-                if (ret < 0) {
-                    System.err.println("error during decoding");
-                }
-
-                swscale.sws_scale(sws_ctx, yuv420Frame.data(), yuv420Frame.linesize(), 0,
-                        yuv420Frame.height(), rgbFrame.data(), rgbFrame.linesize());
-
-                DataBufferByte buffer = (DataBufferByte) img.getRaster().getDataBuffer();
-                rgbFrame.data(0).get(buffer.getData());
-            }
+            receiveFrames();
         }
-
+        // now process delayed frames
+        int ret = avcodec.avcodec_send_packet(codecContext, null);
+        if (ret < 0) {
+            System.err.println("Error sending a packet for decoding\n");
+            System.exit(1);
+        }
+        receiveFrames();
         free();
+    }
+
+    private void receiveFrames() throws IOException {
+        int ret = 0;
+        while (ret >= 0) {
+            ret = avcodec.avcodec_receive_frame(codecContext, yuv420Frame);
+            if (ret == AVERROR_EAGAIN() || ret == AVERROR_EOF()) {
+                continue;
+            } else
+            if (ret < 0) {
+                System.err.println("error during decoding");
+            }
+            swscale.sws_scale(sws_ctx, yuv420Frame.data(), yuv420Frame.linesize(), 0,
+                    yuv420Frame.height(), rgbFrame.data(), rgbFrame.linesize());
+
+            rgbFrame.best_effort_timestamp(yuv420Frame.best_effort_timestamp());
+            processFrame(rgbFrame);
+        }
+    }
+
+    private void processFrame(AVFrame rgbFrame) throws IOException {
+        DataBufferByte buffer = (DataBufferByte) img.getRaster().getDataBuffer();
+        rgbFrame.data(0).get(buffer.getData());
+
+        long ptsMillis = av_rescale_q(rgbFrame.best_effort_timestamp(), videoStream.time_base(), tb1000);
+        Duration d = Duration.of(ptsMillis, ChronoUnit.MILLIS);
+
+        String name = String.format("img_%05d_%02d-%02d-%02d-%03d.png", ++nframe,
+                d.toHoursPart(),
+                d.toMinutesPart(),
+                d.toSecondsPart(),
+                d.toMillisPart());
+        ImageIO.write(img, "png", new File(name));
     }
 
     private AVFormatContext openInput(String file) throws IOException {
