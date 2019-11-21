@@ -47,9 +47,14 @@ public final class DemuxAndDecodeH264 {
     /** number of frame */
     private int nframe;
 
+    /* 1/1000 of second */
     private AVRational tb1000;
 
-    private DemuxAndDecodeH264() { }
+    private DemuxAndDecodeH264() {
+        tb1000 = new AVRational();
+        tb1000.num(1);
+        tb1000.den(1000);
+    }
 
     public static void main(String... argv) throws IOException {
         new DemuxAndDecodeH264().start(argv);
@@ -65,61 +70,13 @@ public final class DemuxAndDecodeH264 {
         initYuv420Frame();
         getSwsContext();
 
-        // 1/1000 of second
-        tb1000 = new AVRational();
-        tb1000.num(1);
-        tb1000.den(1000);
-
         avpacket = new avcodec.AVPacket();
         while ((av_read_frame(avfmtCtx, avpacket)) >= 0) {
-            int ret = avcodec.avcodec_send_packet(codecContext, avpacket);
-            if (ret < 0) {
-                System.err.println("Error sending a packet for decoding\n");
-                System.exit(1);
-            }
-            receiveFrames();
+            processAVPacket(avpacket);
         }
         // now process delayed frames
-        int ret = avcodec.avcodec_send_packet(codecContext, null);
-        if (ret < 0) {
-            System.err.println("Error sending a packet for decoding\n");
-            System.exit(1);
-        }
-        receiveFrames();
+        processAVPacket(null);
         free();
-    }
-
-    private void receiveFrames() throws IOException {
-        int ret = 0;
-        while (ret >= 0) {
-            ret = avcodec.avcodec_receive_frame(codecContext, yuv420Frame);
-            if (ret == AVERROR_EAGAIN() || ret == AVERROR_EOF()) {
-                continue;
-            } else
-            if (ret < 0) {
-                System.err.println("error during decoding");
-            }
-            swscale.sws_scale(sws_ctx, yuv420Frame.data(), yuv420Frame.linesize(), 0,
-                    yuv420Frame.height(), rgbFrame.data(), rgbFrame.linesize());
-
-            rgbFrame.best_effort_timestamp(yuv420Frame.best_effort_timestamp());
-            processFrame(rgbFrame);
-        }
-    }
-
-    private void processFrame(AVFrame rgbFrame) throws IOException {
-        DataBufferByte buffer = (DataBufferByte) img.getRaster().getDataBuffer();
-        rgbFrame.data(0).get(buffer.getData());
-
-        long ptsMillis = av_rescale_q(rgbFrame.best_effort_timestamp(), videoStream.time_base(), tb1000);
-        Duration d = Duration.of(ptsMillis, ChronoUnit.MILLIS);
-
-        String name = String.format("img_%05d_%02d-%02d-%02d-%03d.png", ++nframe,
-                d.toHoursPart(),
-                d.toMinutesPart(),
-                d.toSecondsPart(),
-                d.toMillisPart());
-        ImageIO.write(img, "png", new File(name));
     }
 
     private AVFormatContext openInput(String file) throws IOException {
@@ -159,11 +116,9 @@ public final class DemuxAndDecodeH264 {
     private void initDecoder() {
         codec = avcodec_find_decoder(AV_CODEC_ID_H264);
         codecContext = avcodec_alloc_context3(codec);
-
         if((codec.capabilities() & avcodec.AV_CODEC_CAP_TRUNCATED) != 0) {
             codecContext.flags(codecContext.flags() | avcodec.AV_CODEC_CAP_TRUNCATED);
         }
-
         avcodec_parameters_to_context(codecContext, videoStream.codecpar());
         if(avcodec_open2(codecContext, codec, (PointerPointer) null) < 0) {
             throw new RuntimeException("Error: could not open codec.\n");
@@ -173,8 +128,7 @@ public final class DemuxAndDecodeH264 {
     private void initYuv420Frame() {
         yuv420Frame = av_frame_alloc();
         if (yuv420Frame == null) {
-            System.err.println("Could not allocate video frame\n");
-            System.exit(1);
+            throw new RuntimeException("Could not allocate video frame\n");
         }
     }
 
@@ -190,7 +144,7 @@ public final class DemuxAndDecodeH264 {
                 rgbFrame.format(),
                 32);
         if (ret < 0) {
-            System.err.println("could not allocate buffer!");
+            throw new RuntimeException("could not allocate buffer!");
         }
 
         img = new BufferedImage(rgbFrame.width(), rgbFrame.height(), BufferedImage.TYPE_3BYTE_BGR);
@@ -201,6 +155,49 @@ public final class DemuxAndDecodeH264 {
                 codecContext.width(), codecContext.height(), codecContext.pix_fmt(),
                 rgbFrame.width(), rgbFrame.height(), rgbFrame.format(),
                 0, null, null, (DoublePointer) null);
+    }
+
+
+
+    private void processAVPacket(AVPacket avpacket) throws IOException {
+        int ret = avcodec.avcodec_send_packet(codecContext, avpacket);
+        if (ret < 0) {
+            throw new RuntimeException("Error sending a packet for decoding\n");
+        }
+        receiveFrames();
+    }
+
+    private void receiveFrames() throws IOException {
+        int ret = 0;
+        while (ret >= 0) {
+            ret = avcodec.avcodec_receive_frame(codecContext, yuv420Frame);
+            if (ret == AVERROR_EAGAIN() || ret == AVERROR_EOF()) {
+                continue;
+            } else
+            if (ret < 0) {
+                throw new RuntimeException("error during decoding");
+            }
+            swscale.sws_scale(sws_ctx, yuv420Frame.data(), yuv420Frame.linesize(), 0,
+                    yuv420Frame.height(), rgbFrame.data(), rgbFrame.linesize());
+
+            rgbFrame.best_effort_timestamp(yuv420Frame.best_effort_timestamp());
+            processFrame(rgbFrame);
+        }
+    }
+
+    private void processFrame(AVFrame rgbFrame) throws IOException {
+        DataBufferByte buffer = (DataBufferByte) img.getRaster().getDataBuffer();
+        rgbFrame.data(0).get(buffer.getData());
+
+        long ptsMillis = av_rescale_q(rgbFrame.best_effort_timestamp(), videoStream.time_base(), tb1000);
+        Duration d = Duration.of(ptsMillis, ChronoUnit.MILLIS);
+
+        String name = String.format("img_%05d_%02d-%02d-%02d-%03d.png", ++nframe,
+                d.toHoursPart(),
+                d.toMinutesPart(),
+                d.toSecondsPart(),
+                d.toMillisPart());
+        ImageIO.write(img, "png", new File(name));
     }
 
     private void free() {
