@@ -14,9 +14,9 @@ import static org.bytedeco.javacpp.avutil.*;
 import static org.bytedeco.javacpp.presets.avutil.AVERROR_EAGAIN;
 
 /**
- * Read and decode h264 video from matroska (MKV) container
- */
-public final class DemuxAndDecodeH264 {
+* Read and decode h264 video from matroska (MKV) container
+*/
+    public final class DemuxAndDecodeH264 {
     /** Matroska format context */
     private AVFormatContext avfmtCtx;
 
@@ -84,7 +84,6 @@ public final class DemuxAndDecodeH264 {
         BytePointer filePointer = new BytePointer(file);
         int r = avformat.avformat_open_input(avfmtCtx, filePointer, null, null);
         filePointer.deallocate();
-
         if (r < 0) {
             avfmtCtx.close();
             throw new IOException("avformat_open_input error: " + r);
@@ -146,7 +145,6 @@ public final class DemuxAndDecodeH264 {
         if (ret < 0) {
             throw new RuntimeException("could not allocate buffer!");
         }
-
         img = new BufferedImage(rgbFrame.width(), rgbFrame.height(), BufferedImage.TYPE_3BYTE_BGR);
     }
 
@@ -156,8 +154,6 @@ public final class DemuxAndDecodeH264 {
                 rgbFrame.width(), rgbFrame.height(), rgbFrame.format(),
                 0, null, null, (DoublePointer) null);
     }
-
-
 
     private void processAVPacket(AVPacket avpacket) throws IOException {
         int ret = avcodec.avcodec_send_packet(codecContext, avpacket);
