@@ -72,7 +72,9 @@ public final class DemuxAndDecodeH264 {
 
         avpacket = new avcodec.AVPacket();
         while ((av_read_frame(avfmtCtx, avpacket)) >= 0) {
-            processAVPacket(avpacket);
+            if (avpacket.stream_index() == videoStream.index()) {
+                processAVPacket(avpacket);
+            }
             av_packet_unref(avpacket);
         }
         // now process delayed frames
