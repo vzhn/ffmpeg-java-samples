@@ -47,9 +47,14 @@ public final class DemuxAndDecodeH264 {
     /** number of frame */
     private int nframe;
 
+    /* 1/1000 of second */
     private AVRational tb1000;
 
-    private DemuxAndDecodeH264() { }
+    private DemuxAndDecodeH264() {
+        tb1000 = new AVRational();
+        tb1000.num(1);
+        tb1000.den(1000);
+    }
 
     public static void main(String... argv) throws IOException {
         new DemuxAndDecodeH264().start(argv);
@@ -65,28 +70,21 @@ public final class DemuxAndDecodeH264 {
         initYuv420Frame();
         getSwsContext();
 
-        // 1/1000 of second
-        tb1000 = new AVRational();
-        tb1000.num(1);
-        tb1000.den(1000);
-
         avpacket = new avcodec.AVPacket();
         while ((av_read_frame(avfmtCtx, avpacket)) >= 0) {
-            int ret = avcodec.avcodec_send_packet(codecContext, avpacket);
-            if (ret < 0) {
-                System.err.println("Error sending a packet for decoding\n");
-                System.exit(1);
-            }
-            receiveFrames();
+            processAVPacket(avpacket);
         }
         // now process delayed frames
-        int ret = avcodec.avcodec_send_packet(codecContext, null);
+        processAVPacket(null);
+        free();
+    }
+
+    private void processAVPacket(AVPacket avpacket) throws IOException {
+        int ret = avcodec.avcodec_send_packet(codecContext, avpacket);
         if (ret < 0) {
-            System.err.println("Error sending a packet for decoding\n");
-            System.exit(1);
+            throw new RuntimeException("Error sending a packet for decoding\n");
         }
         receiveFrames();
-        free();
     }
 
     private void receiveFrames() throws IOException {
@@ -97,7 +95,7 @@ public final class DemuxAndDecodeH264 {
                 continue;
             } else
             if (ret < 0) {
-                System.err.println("error during decoding");
+                throw new RuntimeException("error during decoding");
             }
             swscale.sws_scale(sws_ctx, yuv420Frame.data(), yuv420Frame.linesize(), 0,
                     yuv420Frame.height(), rgbFrame.data(), rgbFrame.linesize());
@@ -159,11 +157,9 @@ public final class DemuxAndDecodeH264 {
     private void initDecoder() {
         codec = avcodec_find_decoder(AV_CODEC_ID_H264);
         codecContext = avcodec_alloc_context3(codec);
-
         if((codec.capabilities() & avcodec.AV_CODEC_CAP_TRUNCATED) != 0) {
             codecContext.flags(codecContext.flags() | avcodec.AV_CODEC_CAP_TRUNCATED);
         }
-
         avcodec_parameters_to_context(codecContext, videoStream.codecpar());
         if(avcodec_open2(codecContext, codec, (PointerPointer) null) < 0) {
             throw new RuntimeException("Error: could not open codec.\n");
@@ -173,8 +169,7 @@ public final class DemuxAndDecodeH264 {
     private void initYuv420Frame() {
         yuv420Frame = av_frame_alloc();
         if (yuv420Frame == null) {
-            System.err.println("Could not allocate video frame\n");
-            System.exit(1);
+            throw new RuntimeException("Could not allocate video frame\n");
         }
     }
 
@@ -190,7 +185,7 @@ public final class DemuxAndDecodeH264 {
                 rgbFrame.format(),
                 32);
         if (ret < 0) {
-            System.err.println("could not allocate buffer!");
+            throw new RuntimeException("could not allocate buffer!");
         }
 
         img = new BufferedImage(rgbFrame.width(), rgbFrame.height(), BufferedImage.TYPE_3BYTE_BGR);
