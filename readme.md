@@ -5,7 +5,7 @@
 
 * demux MKV file
 * decode h264 video stream
-* convert yub420p `AVFrame` to RGB `AVFrame`
+* convert yuv420p `AVFrame` to RGB `AVFrame`
 * convert `AVFrame` to java `BufferedImage`
 
 see [DemuxAndDecodeH264.java](https://github.com/vzhn/ffmpeg-java-samples/blob/master/src/main/java/DemuxAndDecodeH264.java)
@@ -13,7 +13,7 @@ see [DemuxAndDecodeH264.java](https://github.com/vzhn/ffmpeg-java-samples/blob/m
 ### Encode and mux h264
 * draw pictures on java `BufferedImage`
 * convert `BufferedImage` to RGB `AVFrame`
-* convert RGB `AVFrame` to yub420p `AVFrame`
+* convert RGB `AVFrame` to yuv420p `AVFrame`
 * encode `AVFrame` and get sequence of `AVPacket`'s
 * mux `AVPackets` to Matroska media container
 
