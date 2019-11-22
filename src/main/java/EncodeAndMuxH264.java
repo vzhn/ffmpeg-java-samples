@@ -41,6 +41,7 @@ public final class EncodeAndMuxH264 {
     private String ofile;
     private AVRational streamTimebase;
     private AVRational codecTimebase;
+    private AVPacket pkt;
 
     private EncodeAndMuxH264() {}
 
@@ -94,14 +95,14 @@ public final class EncodeAndMuxH264 {
         allocOutputContext();
 
         encodeVideo(pkt);
-        writeDelayedFrames(pkt);
+        writeDelayedFrames();
 
         av_write_trailer(oc);
         free(cc, oc);
     }
 
-    private void writeDelayedFrames(AVPacket pkt) {
-        sendFrame(pkt, null);
+    private void writeDelayedFrames() {
+        sendFrame(null);
     }
 
     private void encodeVideo(AVPacket pkt) {
@@ -109,14 +110,14 @@ public final class EncodeAndMuxH264 {
             frame.pts(avutil.av_rescale_q(i, codecTimebase, streamTimebase));
 
             drawFrame(i);
-            sendFrame(pkt, frame);
+            sendFrame(frame);
         }
     }
 
-    private void sendFrame(AVPacket pkt, AVFrame o) {
+    private void sendFrame(AVFrame o) {
         int r = avcodec.avcodec_send_frame(cc, o);
         if (r == 0) {
-            receivePacket(pkt);
+            receivePacket();
         } else {
             throw new RuntimeException("error: " + r);
         }
@@ -140,6 +141,7 @@ public final class EncodeAndMuxH264 {
 
     private void allocOutputContext() {
         oc = new AVFormatContext();
+        pkt = new AVPacket();
         int r = avformat_alloc_output_context2(oc, null, null, ofile);
         if (r < 0) {
             throw new RuntimeException("could not allocate output context");
@@ -240,7 +242,7 @@ public final class EncodeAndMuxH264 {
         }
     }
 
-    private void receivePacket(AVPacket pkt) {
+    private void receivePacket() {
         int r;
         while ((r = avcodec.avcodec_receive_packet(cc, pkt)) == 0) {
             r = av_interleaved_write_frame(oc, pkt);
