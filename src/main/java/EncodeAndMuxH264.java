@@ -174,10 +174,6 @@ public final class EncodeAndMuxH264 {
         codecTimebase = new avutil.AVRational();
         codecTimebase.num(1);
         codecTimebase.den(fps);
-        avutil.AVRational framerate = new avutil.AVRational();
-        framerate.num(codecTimebase.den());
-        framerate.den(codecTimebase.num());
-
         codec = avcodec_find_encoder(AV_CODEC_ID_H264);
         cc = avcodec_alloc_context3(codec);
 
