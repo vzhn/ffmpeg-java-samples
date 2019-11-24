@@ -23,6 +23,6 @@ see [EncodeAndMuxH264.java](https://github.com/vzhn/ffmpeg-java-samples/blob/mas
 ### Grab screen
 * get picture data from `x11grab` device
 * convert picture data to RGB format
-* convert picture data to java `BufferedImage`
+* convert RGB data to java `BufferedImage`
 
-see [EncodeAndMuxH264.java](https://github.com/vzhn/ffmpeg-java-samples/blob/master/src/main/java/GrabScreen.java)
+see [GrabScreen.java](https://github.com/vzhn/ffmpeg-java-samples/blob/master/src/main/java/GrabScreen.java)
