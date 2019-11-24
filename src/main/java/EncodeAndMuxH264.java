@@ -80,7 +80,7 @@ public final class EncodeAndMuxH264 {
 
     private static String getOption(CommandLine cmd, String key, String defaultValue) {
         String v = cmd.getOptionValue(key, defaultValue);
-        System.out.println("\t" + key + " = \"" + defaultValue + "\"");
+        System.out.println("\t" + key + " = \"" + v + "\"");
         return v;
     }
 

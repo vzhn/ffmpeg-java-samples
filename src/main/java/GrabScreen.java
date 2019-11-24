@@ -21,7 +21,7 @@ public final class GrabScreen {
 
     /** screen fragment dimensions */
     private static final String DEFAULT_WIDTH = "640";
-    private static final String DEFAULT_HEIGHT = "320";
+    private static final String DEFAULT_HEIGHT = "480";
 
     private int width;
     private int height;
@@ -72,7 +72,7 @@ public final class GrabScreen {
 
     private static String getOption(CommandLine cmd, String key, String defaultValue) {
         String v = cmd.getOptionValue(key, defaultValue);
-        System.out.println("\t" + key + " = \"" + defaultValue + "\"");
+        System.out.println("\t" + key + " = \"" + v + "\"");
         return v;
     }
 
@@ -88,9 +88,12 @@ public final class GrabScreen {
         }
 
         String url = format("%s.0+%d,%d", display, x, y);
-        if(avformat_open_input(x11GrabDevice, url, x11grab, null) != 0) {
+        AVDictionary options = new AVDictionary();
+        av_dict_set(options, "video_size", format("%dx%d", width, height), 0);
+        if(avformat_open_input(x11GrabDevice, url, x11grab, options) != 0) {
             throw new RuntimeException("Couldn't open input stream.\n");
         }
+        av_dict_free(options);
 
         av_dump_format(x11GrabDevice, 0, url, 0);
         if (x11GrabDevice.nb_streams() == 0) {
