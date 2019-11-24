@@ -11,9 +11,10 @@ import static org.bytedeco.javacpp.avcodec.av_packet_unref;
 import static org.bytedeco.javacpp.avdevice.avdevice_register_all;
 import static org.bytedeco.javacpp.avformat.*;
 import static org.bytedeco.javacpp.avutil.*;
-import static org.bytedeco.javacpp.swscale.*;
+import static org.bytedeco.javacpp.swscale.sws_freeContext;
+import static org.bytedeco.javacpp.swscale.sws_getContext;
 
-public class GrabScreen {
+public final class GrabScreen {
     /** upper left corner coordinates */
     private static final String DEFAULT_X = "0";
     private static final String DEFAULT_Y = "0";
@@ -35,6 +36,8 @@ public class GrabScreen {
     private AVFrame rgbFrame;
     private swscale.SwsContext swsContext;
     private IntPointer bgr0Linesize;
+
+    private GrabScreen() {}
 
     public static void main(String... argv) throws ParseException {
         av_log_set_level(AV_LOG_VERBOSE);
@@ -76,7 +79,13 @@ public class GrabScreen {
     private void setupX11GrabDevice() {
         avdevice_register_all();
         x11grab = av_find_input_format("x11grab");
+        if (x11grab == null) {
+            throw new RuntimeException("x11grab not found");
+        }
         x11GrabDevice = avformat_alloc_context();
+        if (x11GrabDevice == null) {
+            throw new RuntimeException("x11grab device not found");
+        }
 
         String url = format("%s.0+%d,%d", display, x, y);
         if(avformat_open_input(x11GrabDevice, url, x11grab, null) != 0) {
