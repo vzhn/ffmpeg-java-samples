@@ -99,11 +99,7 @@ public final class GrabScreen {
         if (x11GrabDevice.nb_streams() == 0) {
             throw new RuntimeException("Stream not found!");
         }
-        AVStream st = x11GrabDevice.streams(0);
-        avcodec.AVCodecParameters params = st.codecpar();
-        width = params.width();
-        height = params.height();
-        int pixFormat = params.format();
+        int pixFormat = x11GrabDevice.streams(0).codecpar().format();
         if (pixFormat != AV_PIX_FMT_BGR0) {
             throw new RuntimeException("unsupported pixel format: " + pixFormat);
         }
