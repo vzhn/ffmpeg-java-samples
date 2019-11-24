@@ -1,41 +1,136 @@
-import org.bytedeco.javacpp.DoublePointer;
-import org.bytedeco.javacpp.avcodec;
-import org.bytedeco.javacpp.swscale;
+import org.apache.commons.cli.*;
+import org.bytedeco.javacpp.*;
 
 import javax.swing.*;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferByte;
 
-import static javax.swing.WindowConstants.EXIT_ON_CLOSE;
-import static org.bytedeco.javacpp.Pointer.memcpy;
+import static java.lang.String.format;
+import static org.bytedeco.javacpp.avcodec.av_packet_unref;
 import static org.bytedeco.javacpp.avdevice.avdevice_register_all;
 import static org.bytedeco.javacpp.avformat.*;
 import static org.bytedeco.javacpp.avutil.*;
-import static org.bytedeco.javacpp.swscale.sws_getContext;
+import static org.bytedeco.javacpp.swscale.*;
 
 public class GrabScreen {
-    private int fps = 25;
-    private AVInputFormat ifmt;
+    /** upper left corner coordinates */
+    private static final String DEFAULT_X = "0";
+    private static final String DEFAULT_Y = "0";
+
+    /** screen fragment dimensions */
+    private static final String DEFAULT_WIDTH = "640";
+    private static final String DEFAULT_HEIGHT = "320";
+
+    private int width;
+    private int height;
+    private int x;
+    private int y;
+    private String display;
+
+    private AVInputFormat x11grab;
     private AVFormatContext x11GrabDevice;
     private avcodec.AVPacket pkt;
     private BufferedImage bufferedImage;
-    private int width;
-    private int height;
-    private AVFrame bgr0Frame;
     private AVFrame rgbFrame;
     private swscale.SwsContext swsContext;
+    private IntPointer bgr0Linesize;
 
-    public static void main(String... argv) {
-        new GrabScreen().start();
+    public static void main(String... argv) throws ParseException {
+        av_log_set_level(AV_LOG_VERBOSE);
+
+        Options options = new Options();
+        options.addOption("help", false, "show help and exit");
+        options.addOption("width", true, "width");
+        options.addOption("height", true, "height");
+        options.addOption("x", true, "x");
+        options.addOption("y", true, "y");
+        options.addOption("display", true, "display");
+
+        CommandLine cmd = new DefaultParser().parse(options, argv);
+        if (cmd.hasOption("help")) {
+            HelpFormatter helpFormatter = new HelpFormatter();
+            helpFormatter.printHelp("EncodeAndMuxH264 [options]", options);
+        } else {
+            System.out.println("options:");
+            GrabScreen instance = new GrabScreen();
+            instance.width = Integer.parseInt(getOption(cmd,"width", DEFAULT_WIDTH));
+            instance.height = Integer.parseInt(getOption(cmd,"height", DEFAULT_HEIGHT));
+            instance.x = Integer.parseInt(getOption(cmd,"x", DEFAULT_X));
+            instance.y = Integer.parseInt(getOption(cmd,"y", DEFAULT_Y));
+            instance.display = getOption(cmd, "display", System.getenv("DISPLAY"));
+
+            instance.start();
+        }
+
+        GrabScreen instance = new GrabScreen();
+        instance.start();
+    }
+
+    private static String getOption(CommandLine cmd, String key, String defaultValue) {
+        String v = cmd.getOptionValue(key, defaultValue);
+        System.out.println("\t" + key + " = \"" + defaultValue + "\"");
+        return v;
+    }
+
+    private void setupX11GrabDevice() {
+        avdevice_register_all();
+        x11grab = av_find_input_format("x11grab");
+        x11GrabDevice = avformat_alloc_context();
+
+        String url = format("%s.0+%d,%d", display, x, y);
+        if(avformat_open_input(x11GrabDevice, url, x11grab, null) != 0) {
+            throw new RuntimeException("Couldn't open input stream.\n");
+        }
+
+        av_dump_format(x11GrabDevice, 0, url, 0);
+        if (x11GrabDevice.nb_streams() == 0) {
+            throw new RuntimeException("Stream not found!");
+        }
+        AVStream st = x11GrabDevice.streams(0);
+        avcodec.AVCodecParameters params = st.codecpar();
+        width = params.width();
+        height = params.height();
+        int pixFormat = params.format();
+        if (pixFormat != AV_PIX_FMT_BGR0) {
+            throw new RuntimeException("unsupported pixel format: " + pixFormat);
+        }
+        pkt = new avcodec.AVPacket();
     }
 
     private void start() {
         setupX11GrabDevice();
-        allocBGR0Frame();
         allocRGB24Frame();
         allocSWSContext();
 
+        JFrame frame = setupJFrame();
+        PointerPointer<Pointer> pktDataPointer = new PointerPointer<>(1);
+        while (frame.isShowing()) {
+            av_read_frame(x11GrabDevice, pkt);
+            pktDataPointer.put(pkt.data());
+
+            swscale.sws_scale(
+                swsContext, pktDataPointer, bgr0Linesize, 0,
+                rgbFrame.height(), rgbFrame.data(), rgbFrame.linesize()
+            );
+
+            DataBufferByte buffer = (DataBufferByte) bufferedImage.getRaster().getDataBuffer();
+            rgbFrame.data(0).get(buffer.getData());
+            av_packet_unref(pkt);
+
+            frame.repaint();
+        }
+        pktDataPointer.deallocate();
+
+        av_frame_free(rgbFrame);
+        avformat_close_input(x11GrabDevice);
+        sws_freeContext(swsContext);
+
+        frame.dispose();
+        System.exit(0);
+    }
+
+    private JFrame setupJFrame() {
         this.bufferedImage = new BufferedImage(width, height, BufferedImage.TYPE_3BYTE_BGR);
         JFrame frame = new JFrame() {
             @Override
@@ -43,33 +138,10 @@ public class GrabScreen {
                 g.drawImage(bufferedImage, 0, 0, null);
             }
         };
+        frame.setTitle("grab screen");
         frame.setSize(width, height);
         frame.setVisible(true);
-        frame.setDefaultCloseOperation(EXIT_ON_CLOSE);
-
-        pkt = new avcodec.AVPacket();
-
-        while (true) {
-            av_read_frame(x11GrabDevice, pkt);
-            memcpy(bgr0Frame.data(0), pkt.data(), pkt.size());
-
-            swscale.sws_scale(
-                swsContext, bgr0Frame.data(), bgr0Frame.linesize(), 0,
-                rgbFrame.height(), rgbFrame.data(), rgbFrame.linesize()
-            );
-
-            DataBufferByte buffer = (DataBufferByte) bufferedImage.getRaster().getDataBuffer();
-            rgbFrame.data(0).get(buffer.getData());
-
-            frame.repaint();
-        }
-    }
-
-    private void allocSWSContext() {
-        swsContext =
-            sws_getContext(width, height, bgr0Frame.format(),
-            width, height, rgbFrame.format(), 0,
-                null, null, (DoublePointer) null);
+        return frame;
     }
 
     private void allocRGB24Frame() {
@@ -83,36 +155,12 @@ public class GrabScreen {
         }
     }
 
-    private void allocBGR0Frame() {
-        bgr0Frame = av_frame_alloc();
-        bgr0Frame.format(AV_PIX_FMT_BGR0);
-        bgr0Frame.width(width);
-        bgr0Frame.height(height);
-        int ret = av_frame_get_buffer(bgr0Frame, 32);
-        if (ret < 0) {
-            throw new RuntimeException("Could not allocate the video frame data");
-        }
-    }
-
-    private void setupX11GrabDevice() {
-        avdevice_register_all();
-        ifmt = av_find_input_format("x11grab");
-        x11GrabDevice = avformat_alloc_context();
-
-        String url = ":1.0+10,20";
-        if(avformat_open_input(x11GrabDevice, url,ifmt, null) != 0) {
-            throw new RuntimeException("Couldn't open input stream.\n");
-        }
-
-        av_dump_format(x11GrabDevice, 0, url, 0);
-
-        AVStream st = x11GrabDevice.streams(0);
-        avcodec.AVCodecParameters params = st.codecpar();
-        width = params.width();
-        height = params.height();
-        int pixFormat = params.format();
-        if (pixFormat != AV_PIX_FMT_BGR0) {
-            throw new RuntimeException("unsupported pixel format: " + pixFormat);
-        }
+    private void allocSWSContext() {
+        bgr0Linesize = new IntPointer(0);
+        bgr0Linesize.put(4 * width);
+        swsContext =
+            sws_getContext(width, height, AV_PIX_FMT_BGR0,
+            width, height, rgbFrame.format(), 0,
+                null, null, (DoublePointer) null);
     }
 }

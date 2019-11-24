@@ -18,3 +18,11 @@ see [DemuxAndDecodeH264.java](https://github.com/vzhn/ffmpeg-java-samples/blob/m
 * mux `AVPackets` to Matroska media container
 
 see [EncodeAndMuxH264.java](https://github.com/vzhn/ffmpeg-java-samples/blob/master/src/main/java/EncodeAndMuxH264.java)
+
+
+### Grab screen
+* get picture data from `x11grab` device
+* convert picture data to RGB format
+* convert picture data to java `BufferedImage`
+
+see [EncodeAndMuxH264.java](https://github.com/vzhn/ffmpeg-java-samples/blob/master/src/main/java/GrabScreen.java)
