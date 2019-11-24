@@ -156,7 +156,7 @@ public class GrabScreen {
     }
 
     private void allocSWSContext() {
-        bgr0Linesize = new IntPointer(0);
+        bgr0Linesize = new IntPointer(1);
         bgr0Linesize.put(4 * width);
         swsContext =
             sws_getContext(width, height, AV_PIX_FMT_BGR0,
