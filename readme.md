@@ -26,3 +26,12 @@ see [EncodeAndMuxH264.java](https://github.com/vzhn/ffmpeg-java-samples/blob/mas
 * convert RGB data to java `BufferedImage`
 
 see [GrabScreen.java](https://github.com/vzhn/ffmpeg-java-samples/blob/master/src/main/java/GrabScreen.java)
+
+### USB Webcam capture (Linux)
+Works well with my Logitech webcam
+
+* get picture data from `v4l2` device in `mjpeg` format
+* convert mjpeg to BufferedImage
+* show BufferedImage on JFrame
+
+see [WebcamCapture.java](https://github.com/vzhn/ffmpeg-java-samples/blob/master/src/main/java/WebcamCapture.java)
