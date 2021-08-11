@@ -136,7 +136,7 @@ public final class DemuxAndDecodeH264 {
 
     private void initRgbFrame() {
         rgbFrame = av_frame_alloc();
-        rgbFrame.format(AV_PIX_FMT_RGB24);
+        rgbFrame.format(AV_PIX_FMT_BGR24);
         rgbFrame.width(codecContext.width());
         rgbFrame.height(codecContext.height());
         int ret = av_image_alloc(rgbFrame.data(),
@@ -144,7 +144,7 @@ public final class DemuxAndDecodeH264 {
                 rgbFrame.width(),
                 rgbFrame.height(),
                 rgbFrame.format(),
-                32);
+                1);
         if (ret < 0) {
             throw new RuntimeException("could not allocate buffer!");
         }
